@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 
@@ -167,6 +169,8 @@ export function SearchBar({ trigger }: SearchBarProps) {
 
       <Dialog open={isOpen} onOpenChange={setOpen}>
         <DialogContent className="overflow-hidden p-0">
+          <DialogTitle className="sr-only">搜索文档</DialogTitle>
+          <DialogDescription className="sr-only">搜索文档标题或内容</DialogDescription>
           <div className="flex items-center border-b border-border px-3">
             <Search className="h-4 w-4 shrink-0 opacity-50" />
             <Input

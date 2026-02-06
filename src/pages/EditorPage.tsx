@@ -25,12 +25,20 @@ export function EditorPage() {
 
   const currentDocument = useDocumentStore((state) => state.currentDocument)
   const updateDocument = useDocumentStore((state) => state.updateDocument)
+  const fetchDocument = useDocumentStore((state) => state.fetchDocument)
   const fetchDocumentTags = useDocumentStore((state) => state.fetchDocumentTags)
   const setDocumentTags = useDocumentStore((state) => state.setDocumentTags)
   const previewOpen = useUIStore((state) => state.previewOpen)
   const togglePreview = useUIStore((state) => state.togglePreview)
 
-  // Load document
+  // Fetch document when id changes
+  useEffect(() => {
+    if (id) {
+      fetchDocument(id)
+    }
+  }, [id, fetchDocument])
+
+  // Load document content when currentDocument changes
   useEffect(() => {
     if (currentDocument) {
       setContent(currentDocument.content || '')

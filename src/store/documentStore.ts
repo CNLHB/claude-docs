@@ -14,6 +14,7 @@ interface DocumentStore {
 
   // Document Actions
   fetchDocuments: (folderId?: string) => Promise<void>
+  fetchDocument: (id: string) => Promise<void>
   createDocument: (input: DocumentInput) => Promise<Document>
   updateDocument: (update: DocumentUpdate) => Promise<void>
   deleteDocument: (id: string) => Promise<void>
@@ -188,6 +189,26 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   setCurrentDocument: (doc) => set({ currentDocument: doc }),
+
+  // Fetch single document
+  fetchDocument: async (id) => {
+    set({ loading: true })
+    try {
+      const { data, error } = await supabase
+        .from('claude_docs_documents')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (error) throw error
+      set({ currentDocument: data })
+    } catch (error) {
+      console.error('Error fetching document:', error)
+      set({ error: (error as Error).message })
+    } finally {
+      set({ loading: false })
+    }
+  },
 
   // Fetch folders
   fetchFolders: async () => {
