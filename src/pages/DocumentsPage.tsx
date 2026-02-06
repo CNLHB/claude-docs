@@ -1,108 +1,240 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDocumentStore } from '@/store/documentStore'
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Plus, FileText, Clock } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { Input } from '@/components/ui/input'
+import { FileTree } from '@/components/file-tree/FileTree'
+import { FileList } from '@/components/file-tree/FileList'
+import { ViewToggle } from '@/components/file-tree/ViewToggle'
+import { Plus, File, Loader2, X } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function DocumentsPage() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
-  const { documents, fetchDocuments, createDocument, setCurrentDocument, loading } =
-    useDocumentStore()
+
+  // Document store
+  const {
+    documents,
+    folders,
+    selectedFolder,
+    loading,
+    fetchDocuments,
+    fetchFolders,
+    setSelectedFolder,
+  } = useDocumentStore()
+
+  // UI store
+  const { sidebarOpen, setSidebarOpen, viewMode, setViewMode, sortBy, setSortBy } = useUIStore()
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showNewDialog, setShowNewDialog] = useState(false)
+  const [newDocTitle, setNewDocTitle] = useState('')
 
   useEffect(() => {
     if (user) {
       fetchDocuments()
+      fetchFolders()
     }
-  }, [user, fetchDocuments])
+  }, [user, fetchDocuments, fetchFolders, selectedFolder])
+
+  // Fetch documents when folder changes
+  useEffect(() => {
+    if (user) {
+      fetchDocuments(selectedFolder ?? undefined)
+    }
+  }, [selectedFolder, user, fetchDocuments])
+
+  // Sort and filter documents
+  const filteredDocuments = useMemo(() => {
+    let result = [...documents]
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(
+        (doc) =>
+          doc.title.toLowerCase().includes(query) ||
+          doc.content.toLowerCase().includes(query)
+      )
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.title.localeCompare(b.title, 'zh-CN')
+        case 'created':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        case 'modified':
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      }
+    })
+
+    return result
+  }, [documents, searchQuery, sortBy])
+
+  // Get current folder name
+  const currentFolderName = useMemo(() => {
+    if (!selectedFolder) return null
+    const findFolder = (folders: any[], id: string): string | null => {
+      for (const folder of folders) {
+        if (folder.id === id) return folder.name
+        if (folder.children) {
+          const found = findFolder(folder.children, id)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    return findFolder(folders, selectedFolder)
+  }, [selectedFolder, folders])
 
   const handleCreateDocument = async () => {
+    if (!newDocTitle.trim()) return
     try {
       const newDoc = await createDocument({
-        title: '未命名文档',
+        title: newDocTitle,
         content: '',
+        folder_id: selectedFolder,
       })
-      setCurrentDocument(newDoc)
-      navigate(`/editor/${newDoc.id}`)
+      if (newDoc) {
+        setShowNewDialog(false)
+        setNewDocTitle('')
+        navigate(`/editor/${newDoc.id}`)
+        toast.success('文档创建成功')
+      }
     } catch (error) {
-      console.error('Create document error:', error)
+      toast.error('创建失败')
     }
   }
 
-  const handleDocumentClick = (doc: any) => {
-    setCurrentDocument(doc)
-    navigate(`/editor/${doc.id}`)
-  }
+  const createDocument = useDocumentStore((state) => state.createDocument)
 
   return (
-    <div className="flex h-screen flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b border-border bg-muted/40 px-6 py-4">
-        <div>
-          <h1 className="text-2xl font-semibold">文档</h1>
-          <p className="text-sm text-muted-foreground">
-            管理您的 Markdown 文档
-          </p>
-        </div>
-        <Button onClick={handleCreateDocument}>
-          <Plus className="mr-2 h-4 w-4" />
-          新建文档
-        </Button>
-      </header>
-
-      {/* Documents Grid */}
-      <main className="flex-1 overflow-y-auto p-6">
-        {loading ? (
-          <div className="flex items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <Card className="p-12 text-center">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-semibold">暂无文档</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                创建您的第一个文档开始写作
-              </p>
-              <Button className="mt-4" onClick={handleCreateDocument}>
-                <Plus className="mr-2 h-4 w-4" />
-                新建文档
-              </Button>
-            </Card>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {documents.map((doc) => (
-              <Card
-                key={doc.id}
-                className="cursor-pointer transition-shadow hover:shadow-md"
-                onClick={() => handleDocumentClick(doc)}
-              >
-                <div className="p-4">
-                  <div className="mb-2 flex items-start justify-between">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <span className="flex items-center text-xs text-muted-foreground">
-                      <Clock className="mr-1 h-3 w-3" />
-                      {formatDistanceToNow(new Date(doc.updated_at), {
-                        addSuffix: true,
-                        locale: zhCN,
-                      })}
-                    </span>
-                  </div>
-                  <h3 className="mb-1 truncate font-semibold">{doc.title}</h3>
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {doc.content?.slice(0, 100) || '空文档'}
-                  </p>
-                </div>
-              </Card>
-            ))}
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar - File Tree */}
+      <aside
+        className={`border-r border-border bg-card transition-all duration-300 ${
+          sidebarOpen ? 'w-64' : 'w-0'
+        }`}
+      >
+        {sidebarOpen && (
+          <div className="flex h-full flex-col">
+            <FileTree
+              folders={folders}
+              selectedFolder={selectedFolder}
+              onFolderSelect={setSelectedFolder}
+            />
           </div>
         )}
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex flex-1 flex-col overflow-hidden">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-border bg-muted/40 px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <File className="h-5 w-5" />
+            </Button>
+
+            {currentFolderName && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">文件夹:</span>
+                <span className="font-medium">{currentFolderName}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={() => setSelectedFolder(null)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="搜索文档..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-64"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* View Toggle */}
+            <ViewToggle
+              viewMode={viewMode}
+              onViewChange={setViewMode}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+            />
+
+            {/* New Document Button */}
+            <Button onClick={() => setShowNewDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              新建
+            </Button>
+          </div>
+        </header>
+
+        {/* Documents List */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <FileList
+              documents={filteredDocuments}
+              viewMode={viewMode}
+              folderName={currentFolderName ?? undefined}
+            />
+          )}
+        </div>
       </main>
+
+      {/* New Document Dialog */}
+      {showNewDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
+            <h2 className="mb-4 text-lg font-semibold">新建文档</h2>
+            <Input
+              value={newDocTitle}
+              onChange={(e) => setNewDocTitle(e.target.value)}
+              placeholder="文档标题"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateDocument()}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowNewDialog(false)}>
+                取消
+              </Button>
+              <Button onClick={handleCreateDocument}>确定</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7,6 +7,7 @@ interface AuthStore {
   session: Session | null
   loading: boolean
   initialized: boolean
+  initializing: boolean
 
   // Actions
   initialize: () => Promise<void>
@@ -14,18 +15,22 @@ interface AuthStore {
   signUp: (input: RegisterInput) => Promise<void>
   signOut: () => Promise<void>
   ensureProfile: (userId: string, email: string, displayName?: string) => Promise<void>
+  loadUserProfile: (userId: string, email?: string, displayName?: string) => Promise<User | null>
   setUser: (user: User | null) => void
   setSession: (session: Session | null) => void
 }
 
 // 用于存储订阅引用，防止重复订阅
 let authStateChangeSubscription: { unsubscribe: () => void } | null = null
+// 防止重复初始化的锁
+let initializePromise: Promise<void> | null = null
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   session: null,
   loading: true,
   initialized: false,
+  initializing: false,
 
   // 确保 profile 存在，如果不存在则创建
   ensureProfile: async (userId: string, email: string, displayName?: string) => {
@@ -50,7 +55,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   // 加载用户 profile
-  loadUserProfile: async (userId: string) => {
+  loadUserProfile: async (userId: string, email?: string, displayName?: string) => {
     const { data: profile } = await supabase
       .from('claude_docs_profiles')
       .select('*')
@@ -59,18 +64,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     // 如果没有 profile，自动创建一个
     if (!profile) {
-      await get().ensureProfile(
-        userId,
-        '', // email 将从 session 获取
-        '' // displayName 将从 user_metadata 获取
-      )
+      await get().ensureProfile(userId, email || '', displayName)
 
       // 重新获取 profile
       const { data: newProfile } = await supabase
         .from('claude_docs_profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
       return newProfile
     }
@@ -79,42 +80,30 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   initialize: async () => {
-    // 防止重复初始化
+    // 如果已经在初始化中，返回现有的 promise
+    if (initializePromise) {
+      return initializePromise
+    }
+
+    // 如果已经初始化完成，直接返回
     if (get().initialized) {
       return
     }
 
-    set({ loading: true })
+    // 设置初始化中状态
+    set({ initializing: true })
 
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+    // 创建初始化 promise
+    initializePromise = (async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-      if (session) {
-        const profile = await get().loadUserProfile(session.user.id)
-
-        set({
-          user: profile || null,
-          session: {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-            expires_at: session.expires_at || 0,
-            user: profile || null,
-          },
-        })
-      }
-
-      // 清除之前的订阅（如果有）
-      if (authStateChangeSubscription) {
-        authStateChangeSubscription.unsubscribe()
-        authStateChangeSubscription = null
-      }
-
-      // Listen for auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session) {
-          const profile = await get().loadUserProfile(session.user.id)
+          const email = session.user.email || ''
+          const displayName = session.user.user_metadata?.display_name as string | undefined
+          const profile = await get().loadUserProfile(session.user.id, email, displayName)
 
           set({
             user: profile || null,
@@ -125,30 +114,74 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
               user: profile || null,
             },
           })
-        } else {
-          set({ user: null, session: null })
         }
-        set({ loading: false })
-      })
 
-      authStateChangeSubscription = { unsubscribe: () => subscription?.unsubscribe() }
-    } catch (error) {
-      console.error('Error initializing auth:', error)
-      set({ loading: false })
-    } finally {
-      set({ loading: false, initialized: true })
-    }
+        // 清除之前的订阅（如果有）
+        if (authStateChangeSubscription) {
+          authStateChangeSubscription.unsubscribe()
+          authStateChangeSubscription = null
+        }
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          console.log('Auth state changed:', _event, session?.user?.id)
+          if (session) {
+            try {
+              const email = session.user.email || ''
+              const displayName = session.user.user_metadata?.display_name as string | undefined
+              const profile = await get().loadUserProfile(session.user.id, email, displayName)
+
+              console.log('Profile loaded:', profile)
+
+              set({
+                user: profile || null,
+                session: {
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                  expires_at: session.expires_at || 0,
+                  user: profile || null,
+                },
+              })
+            } catch (error) {
+              console.error('Error loading user profile after auth change:', error)
+            }
+          } else {
+            set({ user: null, session: null })
+          }
+          set({ loading: false })
+        })
+
+        authStateChangeSubscription = { unsubscribe: () => subscription?.unsubscribe() }
+      } catch (error) {
+        // AbortError 通常是由于重复初始化导致的，可以忽略
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('Auth initialization aborted (likely due to concurrent init)')
+        } else {
+          console.error('Error initializing auth:', error)
+        }
+      } finally {
+        set({ loading: false, initializing: false, initialized: true })
+        initializePromise = null
+      }
+    })()
+
+    return initializePromise
   },
 
   signIn: async ({ email, password }) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    console.log('Attempting sign in for:', email)
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error) {
+      console.error('Sign in error:', error)
       throw error
     }
+
+    console.log('Sign in successful:', data.user?.id)
+    // Auth state change listener will handle setting the user state
   },
 
   signUp: async ({ email, password, display_name }) => {

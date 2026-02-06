@@ -55,7 +55,8 @@ export function EditorPage() {
 
     setSaving(true)
     try {
-      await updateDocument(id, {
+      await updateDocument({
+        id,
         title,
         content,
       })

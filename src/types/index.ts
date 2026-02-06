@@ -161,7 +161,7 @@ export interface Session {
   access_token: string
   refresh_token: string
   expires_at: number
-  user: User
+  user: User | null
 }
 
 export interface LoginInput {
