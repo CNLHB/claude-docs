@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { FileTree } from '@/components/file-tree/FileTree'
 import { FileList } from '@/components/file-tree/FileList'
 import { ViewToggle } from '@/components/file-tree/ViewToggle'
+import { SearchBar } from '@/components/search/SearchBar'
 import { Plus, File, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -29,7 +30,7 @@ export function DocumentsPage() {
   // UI store
   const { sidebarOpen, setSidebarOpen, viewMode, setViewMode, sortBy, setSortBy } = useUIStore()
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [filterQuery, setFilterQuery] = useState('')
   const [showNewDialog, setShowNewDialog] = useState(false)
   const [newDocTitle, setNewDocTitle] = useState('')
 
@@ -52,8 +53,8 @@ export function DocumentsPage() {
     let result = [...documents]
 
     // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
+    if (filterQuery) {
+      const query = filterQuery.toLowerCase()
       result = result.filter(
         (doc) =>
           doc.title.toLowerCase().includes(query) ||
@@ -75,7 +76,7 @@ export function DocumentsPage() {
     })
 
     return result
-  }, [documents, searchQuery, sortBy])
+  }, [documents, filterQuery, sortBy])
 
   // Get current folder name
   const currentFolderName = useMemo(() => {
@@ -163,24 +164,27 @@ export function DocumentsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Search */}
+            {/* Quick filter for current folder */}
             <div className="relative">
               <Input
                 type="text"
-                placeholder="搜索文档..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64"
+                placeholder="筛选当前文件夹..."
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                className="w-48"
               />
-              {searchQuery && (
+              {filterQuery && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => setFilterQuery('')}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
+
+            {/* Global Search Bar with Command Palette */}
+            <SearchBar />
 
             {/* View Toggle */}
             <ViewToggle

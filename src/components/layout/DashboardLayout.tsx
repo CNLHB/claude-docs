@@ -3,6 +3,7 @@ import { useNavigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Button } from '@/components/ui/button'
+import { SearchBar } from '@/components/search/SearchBar'
 import { LogOut, Menu, FileText, Settings, Home, Star } from 'lucide-react'
 
 interface DashboardLayoutProps {
@@ -115,6 +116,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Top bar with search */}
+        <header className="flex h-16 items-center justify-between border-b border-border bg-muted/40 px-6">
+          <div className="flex-1" />
+          <div className="flex items-center gap-4">
+            <SearchBar />
+          </div>
+        </header>
+
         <main className="flex-1 overflow-y-auto">
           {children || <Outlet />}
         </main>
