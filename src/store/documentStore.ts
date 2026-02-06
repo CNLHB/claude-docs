@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '@/services/supabase/client'
-import type { Document, Folder, DocumentInput, DocumentUpdate, FolderInput, FolderUpdate } from '@/types'
+import { tagService } from '@/services/supabase/tags'
+import type { Document, Folder, DocumentInput, DocumentUpdate, FolderInput, FolderUpdate, Tag } from '@/types'
 
 interface DocumentStore {
   documents: Document[]
@@ -9,6 +10,7 @@ interface DocumentStore {
   selectedFolder: string | null
   loading: boolean
   error: string | null
+  documentTags: Map<string, Tag[]> // documentId -> tags
 
   // Document Actions
   fetchDocuments: (folderId?: string) => Promise<void>
@@ -18,6 +20,10 @@ interface DocumentStore {
   toggleStarDocument: (id: string) => Promise<void>
   toggleArchiveDocument: (id: string) => Promise<void>
   setCurrentDocument: (doc: Document | null) => void
+
+  // Tag Actions
+  fetchDocumentTags: (documentId: string) => Promise<Tag[]>
+  setDocumentTags: (documentId: string, tagIds: string[]) => Promise<void>
 
   // Folder Actions
   fetchFolders: () => Promise<void>
@@ -35,6 +41,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   selectedFolder: null,
   loading: false,
   error: null,
+  documentTags: new Map(),
 
   // Fetch documents
   fetchDocuments: async (folderId?: string) => {
@@ -303,6 +310,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set((state) => ({
       folders: toggleFolderInTree(state.folders, id),
     }))
+  },
+
+  // Fetch document tags
+  fetchDocumentTags: async (documentId) => {
+    const tags = await tagService.getDocumentTags(documentId)
+    set((state) => {
+      const newTags = new Map(state.documentTags)
+      newTags.set(documentId, tags)
+      return { documentTags: newTags }
+    })
+    return tags
+  },
+
+  // Set document tags
+  setDocumentTags: async (documentId, tagIds) => {
+    await tagService.setDocumentTags(documentId, tagIds)
+    // Refresh tags
+    await get().fetchDocumentTags(documentId)
   },
 }))
 

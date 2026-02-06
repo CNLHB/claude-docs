@@ -1,5 +1,5 @@
 import { supabase } from './client'
-import type { Tag, TagInput, DocumentTag } from '@/types'
+import type { Tag, TagInput } from '@/types'
 
 export class TagService {
   // Get all tags for a user
@@ -25,14 +25,14 @@ export class TagService {
       // Check if tag already exists
       const { data: existing } = await supabase
         .from('claude_docs_tags')
-        .select('id')
+        .select('*')
         .eq('user_id', userId)
         .eq('name', input.name)
         .maybeSingle()
 
       if (existing) {
         console.warn('Tag already exists:', existing)
-        return existing
+        return existing as Tag
       }
 
       const { data, error } = await supabase

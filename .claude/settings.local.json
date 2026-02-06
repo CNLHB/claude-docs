@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm run type-check)",
       "Bash(npm run dev)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx shadcn@latest add:*)"
     ]
   }
 }

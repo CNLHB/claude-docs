@@ -6,9 +6,11 @@ import { CodeMirrorEditor } from '@/components/editor/CodeMirrorEditor'
 import { MarkdownPreview } from '@/components/editor/MarkdownPreview'
 import { SplitView } from '@/components/editor/SplitView'
 import { EditorToolbar } from '@/components/editor/EditorToolbar'
+import { TagSelector } from '@/components/tags/TagSelector'
+import { ShareDialog } from '@/components/share/ShareDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function EditorPage() {
@@ -18,9 +20,13 @@ export function EditorPage() {
   const [title, setTitle] = useState('')
   const [hasChanges, setHasChanges] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
 
   const currentDocument = useDocumentStore((state) => state.currentDocument)
   const updateDocument = useDocumentStore((state) => state.updateDocument)
+  const fetchDocumentTags = useDocumentStore((state) => state.fetchDocumentTags)
+  const setDocumentTags = useDocumentStore((state) => state.setDocumentTags)
   const previewOpen = useUIStore((state) => state.previewOpen)
   const togglePreview = useUIStore((state) => state.togglePreview)
 
@@ -29,8 +35,12 @@ export function EditorPage() {
     if (currentDocument) {
       setContent(currentDocument.content || '')
       setTitle(currentDocument.title)
+      // Load tags
+      fetchDocumentTags(currentDocument.id).then((tags) => {
+        setSelectedTags(tags.map((t) => t.id))
+      })
     }
-  }, [currentDocument])
+  }, [currentDocument, fetchDocumentTags])
 
   // Handle content change
   const handleContentChange = useCallback((value: string) => {
@@ -77,6 +87,13 @@ export function EditorPage() {
     saveDocument(true)
   }
 
+  // Handle tags change
+  const handleTagsChange = async (tagIds: string[]) => {
+    if (!id) return
+    setSelectedTags(tagIds)
+    await setDocumentTags(id, tagIds)
+  }
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -119,7 +136,7 @@ export function EditorPage() {
     <div className="flex h-screen flex-col">
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1">
           <Button
             variant="ghost"
             size="icon"
@@ -128,22 +145,39 @@ export function EditorPage() {
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <Input
-            type="text"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value)
-              setHasChanges(true)
-            }}
-            className="h-8 w-64 border-none bg-transparent text-lg font-semibold focus-visible:ring-0"
-            placeholder="文档标题"
-          />
+          <div className="flex flex-col gap-1 flex-1 max-w-md">
+            <Input
+              type="text"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                setHasChanges(true)
+              }}
+              className="h-8 border-none bg-transparent text-lg font-semibold focus-visible:ring-0 px-0"
+              placeholder="文档标题"
+            />
+            {id && (
+              <TagSelector
+                documentId={id}
+                selectedTags={selectedTags}
+                onTagsChange={handleTagsChange}
+              />
+            )}
+          </div>
           {hasChanges && (
             <span className="text-xs text-muted-foreground">未保存</span>
           )}
         </div>
         <div className="flex items-center gap-2">
           {saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShareDialogOpen(true)}
+            title="分享"
+          >
+            <Share2 className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -175,6 +209,16 @@ export function EditorPage() {
           <CodeMirrorEditor content={content} onChange={handleContentChange} />
         )}
       </div>
+
+      {/* Share Dialog */}
+      {id && currentDocument && (
+        <ShareDialog
+          documentId={id}
+          documentTitle={currentDocument.title}
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+        />
+      )}
     </div>
   )
 }
