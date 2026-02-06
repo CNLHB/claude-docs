@@ -19,7 +19,7 @@ interface TagSelectorProps {
   onTagsChange: (tagIds: string[]) => void
 }
 
-export function TagSelector({ documentId, selectedTags, onTagsChange }: TagSelectorProps) {
+export function TagSelector({ documentId: _documentId, selectedTags, onTagsChange }: TagSelectorProps) {
   const { tags, loading, createTag, fetchTags } = useTagStore()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
