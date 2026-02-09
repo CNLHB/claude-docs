@@ -29,7 +29,7 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="shadow-lg">
+    <Card className="w-full max-w-md shadow-lg mx-auto">
       <CardHeader>
         <CardTitle className="text-2xl">登录</CardTitle>
         <CardDescription>
